@@ -3,6 +3,8 @@ import random
 
 import boto3
 import json
+
+import datetime
 import pymongo
 
 print('Loading function')
@@ -169,6 +171,26 @@ def build_html(banner_ids):
 
     return "<html><body>" + images + "</body></html>"
 
+# Build cookie
+def build_cookie(banner_ids):
+    cookie = 'seen_banners_cookie={}; domain=b3ses2yat4.execute-api.eu-central-1.amazonaws.com; expires={};"'
+    expiration = datetime.datetime.now() + datetime.timedelta(days=30)
+    cookie = cookie.format(banner_ids, expiration.strftime("%a, %d-%b-%Y %H:%M:%S PST"))
+    print("Set cookie value ", cookie)
+    return cookie
+
+# Get cookie value
+def get_seen_banners(event):
+    try:
+        for cookie in event["headers"]["Cookie"].split(";"):
+            cookie_elems = cookie.split("=")
+            if "seen_banners_cookie" == cookie_elems[0].strip():
+                return eval(cookie_elems[1])
+        return []
+    except:
+        print("Failed to eval cookie")
+        return []
+
 # Handles the event from Lambda function
 def lambda_handler(event, context):
     print("Received event: " + json.dumps(event, indent=2))
@@ -204,16 +226,25 @@ def lambda_handler(event, context):
     # Campaign ID to serve
     serving_camp_id = int(event["pathParameters"]["campaign_id"])
 
-    banner_ids = get_list_of_banners(db, serving_camp_id, last_processed_collection, [])
+    # Get seen banners
+    seen_banners = get_seen_banners(event)
+    print("Seen Banners ", seen_banners)
+
+    banner_ids = get_list_of_banners(db, serving_camp_id, last_processed_collection, seen_banners)
     content = build_html(banner_ids)
 
     mongo_client.close()
+
+    #set_cookie = 'mycookiee=test; domain=b3ses2yat4.execute-api.eu-central-1.amazonaws.com; expires=Thu, 19 Apr 2018 20:41:27 GMT;"'
+    set_cookie = build_cookie(banner_ids)
 
     return {
         "statusCode": 200,
         "body": content,
         "headers": {
             'Content-Type': 'text/html',
-            'Cookie': 'testcookie1=12345; domain=localhost:8000; expires=Thu, 19 Apr 2018 20:41:27 GMT;'
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Credentials": True,
+            "Set-Cookie":set_cookie
         }
     }
