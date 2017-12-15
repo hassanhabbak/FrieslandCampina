@@ -177,7 +177,6 @@ if __name__ == "__main__":
 
     # Process and transform the data
     banners_campaigns_df = transform_banners_campaign_df(clicks_df, impressions_df, conversions_df)
-    banners_campaigns_df.show()
 
     # Write the dataframe to MongoDB
     banners_campaigns_df.write.format("com.mongodb.spark.sql.DefaultSource").mode("append")\
