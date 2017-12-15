@@ -217,14 +217,3 @@ def lambda_handler(event, context):
             'Cookie': 'testcookie1=12345; domain=localhost:8000; expires=Thu, 19 Apr 2018 20:41:27 GMT;'
         }
     }
-
-
-
-
-"<html><body>" \
-"<img src='<img src='https://s3.eu-central-1.amazonaws.com/frieslandcampinaassignment/images/image_475.png'>" \
-"<img src='https://s3.eu-central-1.amazonaws.com/frieslandcampinaassignment/images/image_325.png'>" \
-"<img src='https://s3.eu-central-1.amazonaws.com/frieslandcampinaassignment/images/image_330.png'>" \
-"<img src='https://s3.eu-central-1.amazonaws.com/frieslandcampinaassignment/images/image_290.png'>" \
-"<img src='https://s3.eu-central-1.amazonaws.com/frieslandcampinaassignment/images/image_435.png'>'>" \
-"</body></html>"
