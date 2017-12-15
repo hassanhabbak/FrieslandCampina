@@ -25,7 +25,7 @@ def get_dataset_folder_to_process(dataset_folders, db):
     print("Fetching processed history")
     last_processed_directory = None
 
-    for row in db.processed.find().sort("_id", 1).limit(1):
+    for row in db.processed.find().sort("_id", -1).limit(1):
         last_processed_directory = row['order']
 
     # No previous records, start from the top
@@ -77,8 +77,6 @@ def transform_banners_campaign_df(clicks_df, impressions_df, conversions_df):
     impressions_grouped = impressions_df.groupBy(["campaign_id", "banner_id"]).count() \
         .withColumnRenamed("count", "impression_count")
 
-    impressions_grouped.show()
-
     # Join conversions with clicks on click ID and with impressions on campaign_id and banner_id
     click_conversion_df = clicks_df.join(impressions_grouped, ["campaign_id", "banner_id"], "left_outer") \
         .join(conversions_df, "click_id", "left_outer") \
@@ -88,9 +86,10 @@ def transform_banners_campaign_df(clicks_df, impressions_df, conversions_df):
     banners_campaigns_df = click_conversion_df \
         .withColumn("revenue_double", click_conversion_df.revenue.cast(DoubleType())) \
         .groupBy(click_conversion_df.campaign_id, click_conversion_df.banner_id) \
-        .agg({'revenue_double': 'sum', 'click_id': 'count'}) \
+        .agg({'revenue_double': 'sum', 'click_id': 'count', 'impression_count':'sum'}) \
         .withColumnRenamed("sum(revenue_double)", "revenue_total") \
-        .withColumnRenamed("count(click_id)", "click_count")
+        .withColumnRenamed("count(click_id)", "click_count") \
+        .withColumnRenamed("sum(impression_count)", "impression_count")
 
     # Casting columns and renaming them
     banners_campaigns_df = banners_campaigns_df \
@@ -98,7 +97,7 @@ def transform_banners_campaign_df(clicks_df, impressions_df, conversions_df):
         .drop("campaign_id").withColumnRenamed("campaign_id_new", "campaign_id") \
         .withColumn("banner_id_new", banners_campaigns_df.banner_id.cast(IntegerType())) \
         .drop("banner_id").withColumnRenamed("banner_id_new", "banner_id") \
-        .withColumn("click_count", banners_campaigns_df.click_count.cast(IntegerType())) \
+        .withColumn("click_count_new", banners_campaigns_df.click_count.cast(IntegerType())) \
         .drop("click_count").withColumnRenamed("click_count_new", "click_count")
 
     return banners_campaigns_df
@@ -178,6 +177,7 @@ if __name__ == "__main__":
 
     # Process and transform the data
     banners_campaigns_df = transform_banners_campaign_df(clicks_df, impressions_df, conversions_df)
+    banners_campaigns_df.show()
 
     # Write the dataframe to MongoDB
     banners_campaigns_df.write.format("com.mongodb.spark.sql.DefaultSource").mode("append")\
