@@ -53,7 +53,7 @@ def get_file_path(directory, file_name):
 
 # Is datasets a duplicate
 def is_duplicate_datasets(db, min_click_id, max_click_id):
-    if db.mycollection.find({'min_click_ID': min_click_id, 'max_click_ID': max_click_id}).count() > 0:
+    if db.processed.find({'min_click_ID': min_click_id, 'max_click_ID': max_click_id}).count() > 0:
         return True
     else:
         return False
@@ -123,9 +123,8 @@ if __name__ == "__main__":
     start_time = datetime.datetime.now().isoformat()
 
     # MongoDB connection
-    # Dev conn
-    # mongo_client = pymongo.MongoClient('127.0.0.3', 3340)
     mongo_client = pymongo.MongoClient('172.31.33.124', 27017)
+    # mongo_client = pymongo.MongoClient('127.0.0.3', 3340) # Dev Connection
     db = mongo_client["banners"]
     db.authenticate("bannersDB", "SDFkl2423")
 
