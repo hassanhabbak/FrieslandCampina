@@ -7,12 +7,13 @@ import pymongo
 BUCKET_NAME = 'frieslandcampinaassignment'
 DATASET_PREFIX = 'csv/'
 
+
 # Grabs the subfolder names in the CSV folder on S3 Bucket
 def get_dataset_folder_names(s3_client):
     dataset_folders = []
     result = s3_client.list_objects(Bucket=BUCKET_NAME, Prefix=DATASET_PREFIX, Delimiter='/')
     for o in result.get('CommonPrefixes'):
-        try: # Attempt to cast the name to integer. Pass on fail
+        try:  # Attempt to cast the name to integer. Pass on fail
             dataset_folders.append(int(o.get('Prefix').split('/')[1]))
         except:
             pass
@@ -20,12 +21,13 @@ def get_dataset_folder_names(s3_client):
     print(dataset_folders)
     return dataset_folders
 
+
 # Returns which dataset folder to process
-def get_dataset_folder_to_process(dataset_folders, db):
+def get_dataset_folder_to_process(dataset_folders, processed):
     print("Fetching processed history")
     last_processed_directory = None
 
-    for row in db.processed.find().sort("_id", -1).limit(1):
+    for row in processed.find().sort("_id", -1).limit(1):
         last_processed_directory = row['order']
 
     # No previous records, start from the top
@@ -47,16 +49,19 @@ def get_dataset_folder_to_process(dataset_folders, db):
 
     return folder_number
 
+
 # Formats the dataset filename
 def get_file_path(directory, file_name):
     return "csv/{}/{}_{}.csv".format(directory, file_name, directory)
 
+
 # Is datasets a duplicate
-def is_duplicate_datasets(db, min_click_id, max_click_id):
-    if db.processed.find({'min_click_ID': min_click_id, 'max_click_ID': max_click_id}).count() > 0:
+def is_duplicate_datasets(processed, min_click_id, max_click_id):
+    if processed.find({'min_click_ID': min_click_id, 'max_click_ID': max_click_id}).count() > 0:
         return True
     else:
         return False
+
 
 # Log Process in MongoDB
 def insert_process_history(db, folder_to_process, click_min_id, click_max_id, process_state, start_time):
@@ -69,9 +74,10 @@ def insert_process_history(db, folder_to_process, click_min_id, click_max_id, pr
             "end_time": datetime.datetime.now().isoformat()}
     db.processed.insert_one(post)
 
+
 # Apply the transformations on the datasets to get performance per banner on campaign
 def transform_banners_campaign_df(clicks_df, impressions_df, conversions_df):
-    print ("Transformation starts")
+    print("Transformation starts")
 
     # Grouped impressions by camp and bannerID
     impressions_grouped = impressions_df.groupBy(["campaign_id", "banner_id"]).count() \
@@ -86,7 +92,7 @@ def transform_banners_campaign_df(clicks_df, impressions_df, conversions_df):
     banners_campaigns_df = click_conversion_df \
         .withColumn("revenue_double", click_conversion_df.revenue.cast(DoubleType())) \
         .groupBy(click_conversion_df.campaign_id, click_conversion_df.banner_id) \
-        .agg({'revenue_double': 'sum', 'click_id': 'count', 'impression_count':'sum'}) \
+        .agg({'revenue_double': 'sum', 'click_id': 'count', 'impression_count': 'sum'}) \
         .withColumnRenamed("sum(revenue_double)", "revenue_total") \
         .withColumnRenamed("count(click_id)", "click_count") \
         .withColumnRenamed("sum(impression_count)", "impression_count")
@@ -102,6 +108,7 @@ def transform_banners_campaign_df(clicks_df, impressions_df, conversions_df):
 
     return banners_campaigns_df
 
+
 # Get max click IDs
 def get_max_click_ids(clicks_df):
     click_max_id = clicks_df.withColumn("click_id_int", clicks_df.click_id.cast(IntegerType())) \
@@ -109,12 +116,14 @@ def get_max_click_ids(clicks_df):
     print("Max Click ID is ", click_max_id)
     return click_max_id
 
+
 # Get min click IDs
 def get_min_click_ids(clicks_df):
     click_min_id = clicks_df.withColumn("click_id_int", clicks_df.click_id.cast(IntegerType())) \
         .agg({'click_id_int': 'min'}).collect()[0][0]
     print("Min Click ID is ", click_min_id)
     return click_min_id
+
 
 if __name__ == "__main__":
 
@@ -148,7 +157,7 @@ if __name__ == "__main__":
         spark.stop()
         exit()
 
-    folder_to_process = get_dataset_folder_to_process(dataset_folders, db)
+    folder_to_process = get_dataset_folder_to_process(dataset_folders, db.processed)
 
     # If folder to process could not be found
     if folder_to_process is None:
@@ -169,7 +178,7 @@ if __name__ == "__main__":
     click_max_id = get_max_click_ids(clicks_df)
     click_min_id = get_min_click_ids(clicks_df)
 
-    if is_duplicate_datasets(db, click_min_id, click_max_id):
+    if is_duplicate_datasets(db.processed, click_min_id, click_max_id):
         print("Duplicate dataset already processed. Ignoring it!")
         insert_process_history(db, folder_to_process, click_min_id, click_max_id, "duplicate", start_time)
         spark.stop()
@@ -179,9 +188,9 @@ if __name__ == "__main__":
     banners_campaigns_df = transform_banners_campaign_df(clicks_df, impressions_df, conversions_df)
 
     # Write the dataframe to MongoDB
-    banners_campaigns_df.write.format("com.mongodb.spark.sql.DefaultSource").mode("append")\
-        .option("database","banners")\
-        .option("collection", "banner_performance_" + str(folder_to_process))\
+    banners_campaigns_df.write.format("com.mongodb.spark.sql.DefaultSource").mode("append") \
+        .option("database", "banners") \
+        .option("collection", "banner_performance_" + str(folder_to_process)) \
         .save()
 
     # Set record in dataset processed Collection

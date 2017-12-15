@@ -9,6 +9,7 @@ import pymongo
 
 print('Loading function')
 
+
 # Handles bad request message
 def handle_bad_request(message, code):
     content = """<html>
@@ -29,6 +30,7 @@ def handle_bad_request(message, code):
         }
     }
 
+
 # Validate the Campaign ID
 def valid_campaign_id(camp_id):
     try:
@@ -37,17 +39,19 @@ def valid_campaign_id(camp_id):
     except ValueError:
         return False
 
+
 # Gets the latest collection from DB
-def get_latest_data_collection(db):
+def get_latest_data_collection(processed):
     last_processed_directory = None
-    for row in db.processed.find().sort("_id", -1).limit(1):
+    for row in processed.find().sort("_id", -1).limit(1):
         last_processed_directory = row['order']
 
     return last_processed_directory
 
+
 # Retreives the banner counts based on ones with impressions, revenue and clicks
-def set_banner_counts(db, collection_name, serving_camp_id):
-    collection_cursor = db[collection_name].aggregate([
+def set_banner_counts(collection, serving_camp_id):
+    collection_cursor = collection.aggregate([
         {
             "$match": {"campaign_id": serving_camp_id}
         },
@@ -83,6 +87,7 @@ def set_banner_counts(db, collection_name, serving_camp_id):
 
     return stats
 
+
 # generate a unique list of banners that are not seen previously if possible
 def generate_unique_list_of_banners(banner_ids, seen_banners, num_of_banners):
     result_banner_ids = []
@@ -107,14 +112,15 @@ def generate_unique_list_of_banners(banner_ids, seen_banners, num_of_banners):
 
     return result_banner_ids
 
+
 # Get list of banners based on limit and seen banners
-def get_list_of_banners_revenue(db, collection_name, serving_camp_id, seen_banners, limit):
+def get_list_of_banners_revenue(collection, serving_camp_id, seen_banners, limit):
     banner_ids = []
 
-    collection_cursor = db[collection_name] \
+    collection_cursor = collection \
         .find({'campaign_id': serving_camp_id}) \
         .sort([('revenue_total', -1),
-               ('click_count', -1)])\
+               ('click_count', -1)]) \
         .limit(limit + len(seen_banners))
 
     for row in collection_cursor:
@@ -123,8 +129,8 @@ def get_list_of_banners_revenue(db, collection_name, serving_camp_id, seen_banne
     # In case we could not find enough banners, pick at random to make-up the limit
     if len(banner_ids) < limit:
         # Get all banner IDs not already in selection
-        all_banner_ids = db[collection_name] \
-            .find({'banner_id':{'$nin':banner_ids}}) \
+        all_banner_ids = collection \
+            .find({'banner_id': {'$nin': banner_ids}}) \
             .distinct('banner_id')
 
         random.shuffle(all_banner_ids)
@@ -135,32 +141,34 @@ def get_list_of_banners_revenue(db, collection_name, serving_camp_id, seen_banne
 
     return generate_unique_list_of_banners(banner_ids, seen_banners, limit)
 
+
 # Get the list of banners to display
 def get_list_of_banners(db, serving_camp_id, last_processed_collection, seen_banners):
     banner_ids = []
-    collection_name = "banner_performance_"+str(last_processed_collection)
+    collection_name = "banner_performance_" + str(last_processed_collection)
 
     # Count of more than zero banner stats
-    camp_stats = set_banner_counts(db, collection_name, serving_camp_id)
+    camp_stats = set_banner_counts(db[collection_name], serving_camp_id)
     print("Banners with impressions = ", camp_stats.impressions_count)
     print("Banners with revenue_count = ", camp_stats.revenue_count)
     print("Banners with click count = ", camp_stats.click_count)
 
     if camp_stats.revenue_count >= 10:
         # More than 10 banners with revenue, serve from that
-        banner_ids = get_list_of_banners_revenue(db, collection_name, serving_camp_id, seen_banners, 10)
+        banner_ids = get_list_of_banners_revenue(db[collection_name], serving_camp_id, seen_banners, 10)
         print("Case revenue count banners > 10")
     elif camp_stats.revenue_count >= 5:
         # if more than 5 with revenue, serve them
-        banner_ids = get_list_of_banners_revenue(db, collection_name, serving_camp_id, [], camp_stats.revenue_count)
+        banner_ids = get_list_of_banners_revenue(db[collection_name], serving_camp_id, [], camp_stats.revenue_count)
         print("Case revenue count banners > 10")
     elif camp_stats.revenue_count >= 0:
         # if more than 0 with revenue
-        banner_ids = get_list_of_banners_revenue(db, collection_name, serving_camp_id, [], 5)
+        banner_ids = get_list_of_banners_revenue(db[collection_name], serving_camp_id, [], 5)
         print("Case revenue count < 5")
 
     print("Banner IDs list ", banner_ids)
     return banner_ids
+
 
 # Builds the HTMl with the images for display
 def build_html(banner_ids):
@@ -171,6 +179,7 @@ def build_html(banner_ids):
 
     return "<html><body>" + images + "</body></html>"
 
+
 # Build cookie
 def build_cookie(banner_ids):
     cookie = 'seen_banners_cookie={}; domain=b3ses2yat4.execute-api.eu-central-1.amazonaws.com; expires={};"'
@@ -179,10 +188,11 @@ def build_cookie(banner_ids):
     print("Set cookie value ", cookie)
     return cookie
 
+
 # Get cookie value
-def get_seen_banners(event):
+def get_seen_banners(cookie_str):
     try:
-        for cookie in event["headers"]["Cookie"].split(";"):
+        for cookie in cookie_str.split(";"):
             cookie_elems = cookie.split("=")
             if "seen_banners_cookie" == cookie_elems[0].strip():
                 return eval(cookie_elems[1])
@@ -190,6 +200,7 @@ def get_seen_banners(event):
     except:
         print("Failed to eval cookie")
         return []
+
 
 # Handles the event from Lambda function
 def lambda_handler(event, context):
@@ -202,7 +213,8 @@ def lambda_handler(event, context):
 
     # Verify that campaign parameter was sent
     if "campaign_id" not in event["pathParameters"] or \
-        ("campaign_id" not in event["pathParameters"] and not valid_campaign_id(event["pathParameters"]["campaign_id"])):
+            ("campaign_id" not in event["pathParameters"] and not valid_campaign_id(
+                event["pathParameters"]["campaign_id"])):
         print("Invalid Campaign ID! " + event["httpMethod"])
         return handle_bad_request("The request method is unsupported!", 400)
 
@@ -216,7 +228,7 @@ def lambda_handler(event, context):
     db.authenticate("bannersDB", "SDFkl2423")
 
     # Gets the latest collection number
-    last_processed_collection = get_latest_data_collection(db)
+    last_processed_collection = get_latest_data_collection(db.processed)
 
     # Handle no data found!
     if last_processed_collection is None:
@@ -227,7 +239,7 @@ def lambda_handler(event, context):
     serving_camp_id = int(event["pathParameters"]["campaign_id"])
 
     # Get seen banners
-    seen_banners = get_seen_banners(event)
+    seen_banners = get_seen_banners(event["headers"]["Cookie"])
     print("Seen Banners ", seen_banners)
 
     banner_ids = get_list_of_banners(db, serving_camp_id, last_processed_collection, seen_banners)
@@ -235,7 +247,7 @@ def lambda_handler(event, context):
 
     mongo_client.close()
 
-    #set_cookie = 'mycookiee=test; domain=b3ses2yat4.execute-api.eu-central-1.amazonaws.com; expires=Thu, 19 Apr 2018 20:41:27 GMT;"'
+    # set_cookie = 'mycookiee=test; domain=b3ses2yat4.execute-api.eu-central-1.amazonaws.com; expires=Thu, 19 Apr 2018 20:41:27 GMT;"'
     set_cookie = build_cookie(banner_ids)
 
     return {
@@ -245,6 +257,6 @@ def lambda_handler(event, context):
             'Content-Type': 'text/html',
             "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Credentials": True,
-            "Set-Cookie":set_cookie
+            "Set-Cookie": set_cookie
         }
     }
