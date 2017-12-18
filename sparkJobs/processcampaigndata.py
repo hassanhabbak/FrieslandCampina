@@ -144,8 +144,8 @@ if __name__ == "__main__":
     spark = SparkSession \
         .builder \
         .appName("processCampaignData") \
-        .config("spark.mongodb.input.uri", "mongodb://bannersDB:SDFkl2423@127.0.0.3:3340/banners") \
-        .config("spark.mongodb.output.uri", "mongodb://bannersDB:SDFkl2423@127.0.0.3:3340/banners") \
+        .config("spark.mongodb.input.uri", "mongodb://bannersDB:SDFkl2423@172.31.33.124:27017/banners") \
+        .config("spark.mongodb.output.uri", "mongodb://bannersDB:SDFkl2423@172.31.33.124:27017/banners") \
         .getOrCreate()
 
     # if the there are no folders to be processed
