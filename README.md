@@ -22,3 +22,28 @@ There are 4 scenarios:
     . X = 0 Show random banners
     
 All banners are randomized to avoid saturation.
+
+## Tech Stack
+
+### MongoDB
+MongoDB is used mainly for storing the aggregated data from Spark Processing. It has a collection that keeps track of all processed files and their Hash to avoid duplication. It then adds the processed stats on a collection for quering from Lambda Function.
+
+MongoDB is selected for database because of its balance of speed vs scalability. It allows for more complex queries, which could be very useful in gaining quick insights on the banner data. Due to the relatively small size of the data, I chose not to go with DynamoDB. Also because of the expense of DynamoDB, MongoDB seemed like a better approach.
+
+### Amazon Lambda Function
+Amazon Lambda function is great for Event based compute. In this case I used it to query MongoDB and render the ads based on the campaign requested. This removes the need for us to have a server running all the time. It also integerates very well with Amazon Cloudwatch and removes the hassle off of logging management. 
+
+### Amazon S3
+Amazon S3 is a reliable and extremely scalable storage system that is well integerated in Amazon Eco System. It is considerably fast to read from S3 from other amazon srevers. It is fault tolerant. Also provides a hashing of the files to avoid duplication.
+
+### Amazon API GateWay
+I use Amazon API Gateway as an endpoint to trigger Amazon Lambda function. This is great for the added security from Amazon Services, as well as the tight integeration with Amazon events. 
+
+### Spark
+Spark is a fantastic data processing Framework that allows us to process the data in any format and extract the insight needed from them. While spark might not be needed for the small datasets we have, it allows for scalability to any dataset size or structure in the future.
+
+### Amazon EMR
+Spark processes the data on EMR cluster. EMR comes with spark preinstalled and is extremely easy to scale. It provides monitoring capabilities and handles logging in a seamless way.
+
+### Crontab
+While my first choice would have been Amazon Data-pipeline, it was not available in the region I am hosting the solution. So Crontab seems like a simple solution to the issue since it can schedule the spark job on the cluster with very little problems.
