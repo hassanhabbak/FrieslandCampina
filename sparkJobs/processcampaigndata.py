@@ -52,27 +52,40 @@ def get_dataset_folder_to_process(dataset_folders, processed):
 
 # Formats the dataset filename
 def get_file_path(directory, file_name):
-    return "csv/{}/{}_{}.csv".format(directory, file_name, directory)
+    return "s3://frieslandcampinaassignment/csv/{}/{}_{}.csv".format(directory, file_name, directory)
 
 
 # Is datasets a duplicate
-def is_duplicate_datasets(processed, min_click_id, max_click_id):
-    if processed.find({'min_click_ID': min_click_id, 'max_click_ID': max_click_id}).count() > 0:
-        return True
-    else:
-        return False
+def is_duplicate_datasets(processed, file_md5Sum):
+    for file in file_md5Sum:
+        if processed.find({file[0]+"_md5Sum": file[1]}).count() > 0:
+            return True
+        else:
+            return False
 
 
 # Log Process in MongoDB
-def insert_process_history(db, folder_to_process, click_min_id, click_max_id, process_state, start_time):
+def insert_process_history(db, folder_to_process, file_md5Sum, process_state, start_time):
     print("Inserting process history")
     post = {"order": folder_to_process,
-            "min_click_ID": click_min_id,
-            "max_click_ID": click_max_id,
             "state": process_state,
             "start_time": start_time,
             "end_time": datetime.datetime.now().isoformat()}
+    for file in file_md5Sum:
+        post[file[0]+"_md5Sum"] = file[1]
     db.processed.insert_one(post)
+
+
+# Get list of keys in a specific bucket with a prefix
+def get_matching_s3_Meta(s3, bucket, prefix=''):
+
+    tuples = []
+    kwargs = {'Bucket': bucket, 'Prefix': prefix}
+    resp = s3.list_objects_v2(**kwargs)
+    for obj in resp['Contents']:
+        tuples.append((obj['Key'].split('/')[2].split('_')[0] ,obj['ETag']))
+
+    return tuples
 
 
 # Apply the transformations on the datasets to get performance per banner on campaign
@@ -107,22 +120,6 @@ def transform_banners_campaign_df(clicks_df, impressions_df, conversions_df):
         .drop("click_count").withColumnRenamed("click_count_new", "click_count")
 
     return banners_campaigns_df
-
-
-# Get max click IDs
-def get_max_click_ids(clicks_df):
-    click_max_id = clicks_df.withColumn("click_id_int", clicks_df.click_id.cast(IntegerType())) \
-        .agg({'click_id_int': 'max'}).collect()[0][0]
-    print("Max Click ID is ", click_max_id)
-    return click_max_id
-
-
-# Get min click IDs
-def get_min_click_ids(clicks_df):
-    click_min_id = clicks_df.withColumn("click_id_int", clicks_df.click_id.cast(IntegerType())) \
-        .agg({'click_id_int': 'min'}).collect()[0][0]
-    print("Min Click ID is ", click_min_id)
-    return click_min_id
 
 
 if __name__ == "__main__":
@@ -174,13 +171,13 @@ if __name__ == "__main__":
     conversions_df.printSchema()
     impressions_df.printSchema()
 
-    # Get minimum and maximum click IDs for duplicate detection
-    click_max_id = get_max_click_ids(clicks_df)
-    click_min_id = get_min_click_ids(clicks_df)
+    # Get file CheckSum in the folder
+    file_tuples = get_matching_s3_Meta(s3_client, BUCKET_NAME, 'csv/{}/'.format(folder_to_process))
+    print("File Hash Keys: ", file_tuples)
 
-    if is_duplicate_datasets(db.processed, click_min_id, click_max_id):
+    if is_duplicate_datasets(db.processed, file_tuples):
         print("Duplicate dataset already processed. Ignoring it!")
-        insert_process_history(db, folder_to_process, click_min_id, click_max_id, "duplicate", start_time)
+        insert_process_history(db, folder_to_process, file_tuples, "duplicate", start_time)
         spark.stop()
         exit()
 
@@ -192,9 +189,10 @@ if __name__ == "__main__":
         .option("database", "banners") \
         .option("collection", "banner_performance_" + str(folder_to_process)) \
         .save()
+    db["banner_performance_" + str(folder_to_process)].create_index([('field_i_want_to_index', pymongo.ASCENDING)])
 
     # Set record in dataset processed Collection
-    insert_process_history(db, folder_to_process, click_min_id, click_max_id, "processed", start_time)
+    insert_process_history(db, folder_to_process, file_tuples, "processed", start_time)
 
     mongo_client.close()
     spark.stop()
