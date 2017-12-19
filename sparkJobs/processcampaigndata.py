@@ -154,7 +154,13 @@ if __name__ == "__main__":
         spark.stop()
         exit()
 
-    folder_to_process = get_dataset_folder_to_process(dataset_folders, db.processed)
+    # Resets all processed collections if its the first quarter of the hour
+    # This is for demo purposes
+    current_minute = datetime.datetime.now().minute
+    if current_minute < 10:
+        folder_to_process = 1
+    else:
+        folder_to_process = get_dataset_folder_to_process(dataset_folders, db.processed)
 
     # If folder to process could not be found
     if folder_to_process is None:
@@ -185,6 +191,7 @@ if __name__ == "__main__":
     banners_campaigns_df = transform_banners_campaign_df(clicks_df, impressions_df, conversions_df)
 
     # Write the dataframe to MongoDB
+    db["banner_performance_" + str(folder_to_process)].drop() # Drop table if exists
     banners_campaigns_df.write.format("com.mongodb.spark.sql.DefaultSource").mode("append") \
         .option("database", "banners") \
         .option("collection", "banner_performance_" + str(folder_to_process)) \
