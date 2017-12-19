@@ -23,14 +23,15 @@ def test_get_folder_to_process():
 
 def test_duplicate_datasets():
     collection = mongomock.MongoClient().db.collection
-    objects = [dict(min_click_ID=10, max_click_ID=20), dict(min_click_ID=20, max_click_ID=30)]
+    objects = [dict(clicks_md5Sum="10", impressions_md5Sum="20", conversions_md5Sum="30"),
+               dict(clicks_md5Sum="40", impressions_md5Sum="50", conversions_md5Sum="60")]
     for obj in objects:
         obj['_id'] = collection.insert(obj)
-    val = processcampaigndata.is_duplicate_datasets(collection, 10, 20)
+    val = processcampaigndata.is_duplicate_datasets(collection, [("clicks", "10")])
     assert(val == True)
 
-    val = processcampaigndata.is_duplicate_datasets(collection, 10, 30)
+    val = processcampaigndata.is_duplicate_datasets(collection, [("conversions", "10")])
     assert(val is False)
 
-    val = processcampaigndata.is_duplicate_datasets(collection, 30, 40)
+    val = processcampaigndata.is_duplicate_datasets(collection,[("clicks", "200"), ("conversions", "10")])
     assert (val is False)
