@@ -1,8 +1,6 @@
 import logging
 import unittest
 import mongomock
-import pytest
-import findspark
 from pyspark import SparkConf, SparkContext
 
 from sparkJobs import processcampaigndata
@@ -28,7 +26,7 @@ def test_duplicate_datasets():
     for obj in objects:
         obj['_id'] = collection.insert(obj)
     val = processcampaigndata.is_duplicate_datasets(collection, [("clicks", "10")])
-    assert(val == True)
+    assert(val is True)
 
     val = processcampaigndata.is_duplicate_datasets(collection, [("conversions", "10")])
     assert(val is False)
